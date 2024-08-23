@@ -1,0 +1,89 @@
+var SHEET_NAME = "SUPORTE CROWN"; // Confirme se este é o nome exato da sua planilha.
+
+function checkForNewRowsAndSendEmail() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    Logger.log("A planilha " + SHEET_NAME + " não foi encontrada.");
+    return;
+  }
+  
+  var lastRow = sheet.getLastRow();
+  var scriptProperties = PropertiesService.getScriptProperties();
+  var lastRowProcessed = parseInt(scriptProperties.getProperty("lastRowProcessed"), 10);
+  
+  if (isNaN(lastRowProcessed)) {
+    lastRowProcessed = 0;
+  }
+
+  Logger.log("Última linha processada: " + lastRowProcessed);
+  Logger.log("Última linha da planilha: " + lastRow);
+
+  if (lastRow > lastRowProcessed) {
+    var range = sheet.getRange(lastRowProcessed + 1, 1, lastRow - lastRowProcessed, sheet.getLastColumn());
+    var newRows = range.getValues();
+
+    for (var i = 0; i < newRows.length; i++) {
+      if (newRows[i][0] !== "") {
+        sendUpdateEmail(newRows[i], lastRowProcessed + i + 1);
+        scriptProperties.setProperty("lastRowProcessed", (lastRowProcessed + i + 1).toString());
+      }
+    }
+  } else {
+    Logger.log('Nenhuma nova linha para processar.');
+  }
+}
+
+function sendUpdateEmail(rowData, rowNumber) {
+  var emails = ["servicebr@crown.com", "expedicaogdm@natura.net", "guilhermesousasilva@natura.net"]; // Lista de endereços de e-mail
+  var subject = "[URGENTE] Solicitação de abertura de chamado - SUPORTE CROWN";
+  var body = "Olá Time Crown,\nSegue abertura do chamado\n\n" +
+             "Descrição: " + rowData[2] + "\n\n" + // rowData[2] é o valor da coluna C
+             "Em anexo, segue histórico de todos chamados atualizados.\n\n" +
+             "Atenciosamente,";
+
+  var attachments = [SpreadsheetApp.getActiveSpreadsheet().getAs(MimeType.PDF)];
+
+  var fullImagePath = rowData[5]; // rowData[5] é o valor na coluna F
+  if (fullImagePath) {
+    var imageName = fullImagePath.split('/').pop();
+    var imageFiles = DriveApp.getFilesByName(imageName);
+    if (imageFiles.hasNext()) {
+      attachments.push(imageFiles.next().getBlob());
+    } else {
+      Logger.log("Arquivo de imagem não encontrado: " + imageName);
+    }
+  }
+
+  try {
+    // Use sendEmail em vez de sendEmails
+    MailApp.sendEmail(emails.join(','), subject, body, {attachments: attachments});
+    Logger.log('E-mail enviado para: ' + emails.join(', '));
+  } catch (e) {
+    Logger.log("Erro ao enviar e-mail: " + e.toString());
+  }
+}
+
+function updateLastRowProcessedAfterDeletion() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    Logger.log("A planilha " + SHEET_NAME + " não foi encontrada.");
+    return;
+  }
+
+  var lastRow = sheet.getLastRow();
+  var scriptProperties = PropertiesService.getScriptProperties();
+  
+  var lastRowProcessed = parseInt(scriptProperties.getProperty("lastRowProcessed"), 10);
+  if (lastRow < lastRowProcessed || isNaN(lastRowProcessed)) {
+    scriptProperties.setProperty("lastRowProcessed", String(lastRow));
+    Logger.log('Propriedade lastRowProcessed atualizada para: ' + lastRow);
+  } else {
+    Logger.log('Não foi necessário atualizar lastRowProcessed.');
+  }
+}
+
+function resetLastRowProcessed() {
+  var scriptProperties = PropertiesService.getScriptProperties();
+  scriptProperties.setProperty("lastRowProcessed", "0");
+  Logger.log('A última linha processada foi resetada para 0');
+}
